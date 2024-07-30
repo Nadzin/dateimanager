@@ -8,14 +8,13 @@
 
     <ion-content :fullscreen="true">
       <ion-header collapse="condense">
-        <ion-toolbar>
-          <ion-title size="large">Blank</ion-title>
-        </ion-toolbar>
       </ion-header>
 
       <ion-list>
         <ion-item>
-          <ion-button fill="solid">+</ion-button>
+          <div class="button-container">
+            <ion-button fill="solid">+</ion-button>
+          </div>
         </ion-item>
       </ion-list>
     </ion-content>
@@ -56,4 +55,16 @@ import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/vue
 #container a {
   text-decoration: none;
 }
+
+#ion-list {
+  display:flex;
+  justify-content:flex-end;
+  align-items: right;
+}
+
+.button-container {
+  justify-content: flex-end;
+  padding-left: 95%;
+}
+
 </style>
