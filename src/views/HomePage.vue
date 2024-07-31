@@ -9,12 +9,12 @@
     <ion-content :fullscreen="true">
       <ion-header collapse="condense">
       </ion-header>
-
+      <div class="button-container">
+            <ion-button fill="solid">+</ion-button>
+      </div>
       <ion-list>
         <ion-item>
-          <div class="button-container">
-            <ion-button fill="solid">+</ion-button>
-          </div>
+
         </ion-item>
       </ion-list>
     </ion-content>
@@ -65,6 +65,7 @@ import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/vue
 .button-container {
   justify-content: flex-end;
   padding-left: 95%;
+  padding-top: 1%;
 }
 
 </style>
