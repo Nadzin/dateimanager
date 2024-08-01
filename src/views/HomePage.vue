@@ -40,7 +40,7 @@ async function loadFiles() {
 
     const fileListElement = document.getElementById('file-list');
 
-    if (result.files.length === 0) {
+    if (result.files.length === 0 || null) {
       fileListElement.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
       return;
     }
@@ -57,44 +57,17 @@ async function loadFiles() {
 </script>
 
 <style scoped>
-#container {
-  text-align: center;
-  
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-#container strong {
-  font-size: 20px;
-  line-height: 26px;
-}
-
-#container p {
-  font-size: 16px;
-  line-height: 22px;
-  
-  color: #8c8c8c;
-  
-  margin: 0;
-}
-
-#container a {
-  text-decoration: none;
-}
-
-#ion-list {
-  display:flex;
-  justify-content:flex-end;
-  align-items: right;
-}
 
 .button-container {
-  justify-content: flex-end;
   padding-left: 95%;
   padding-top: 1%;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 </style>
