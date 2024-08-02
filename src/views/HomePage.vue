@@ -24,7 +24,6 @@
 <script setup lang="ts">
 import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/vue';
 
-//Liste füllen
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -34,23 +33,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadFiles() {
   try {
     const result = await Filesystem.readdir({
-      directory: Directory.Documents,
+      directory: Directory.External,
       path: ''
     });
 
+
     const fileListElement = document.getElementById('file-list');
-
-    if (result.files.length === 0 || null) {
-      fileListElement.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
-      return;
+    if (fileListElement) {
+      if (result.files.length === 0) {
+        fileListElement.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
+        return;
+      }
+  
+      result.files.forEach(file => {
+        const fileItem = document.createElement('ion-item');
+        fileItem.innerHTML = `<ion-label>${file}</ion-label>`;
+        fileListElement.appendChild(fileItem);
+      });
     }
-
-    result.files.forEach(file => {
-      const fileItem = document.createElement('ion-item');
-      fileItem.innerHTML = `<ion-label>${file}</ion-label>`;
-      fileListElement.appendChild(fileItem);
-    });
-  } catch (e) {
+    }
+    catch (e) {
     console.error('Unable to read dir', e);
   }
 }
