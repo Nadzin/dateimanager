@@ -27,6 +27,8 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { IonActionSheet, actionSheetController, alertController, IonButton } from '@ionic/vue';
 import { FileOpener } from '@capawesome-team/capacitor-file-opener';
+import folderIcon from './folder-icon.png';
+import fileIcon from './file-icon.png';
 
 const fileListElement = ref<HTMLElement | null>(null);
 
@@ -35,37 +37,42 @@ onMounted(async () => {
   await loadFiles();
 });
 
-async function loadFiles(directory:
-    /* __placeholder__ */
-    Directory=Directory.Data, name:
-    /* __placeholder__ */
-    string='') {
+async function loadFiles(directory: Directory = Directory.Data, name: string = '') {
   if (!fileListElement.value) {
     return;
   }
 
   try {
     const result = await Filesystem.readdir({
-      directory: Directory.Data,
-      path: ''
+      directory,
+      path: name
     });
 
     if (result.files.length === 0) {
-      fileListElement.value.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ionlabel></ion-item>';
+      fileListElement.value.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
       return;
     }
-    fileListElement.value.innerHTML = ''; // Clear the existing list
-    result.files.forEach(file => {
+    fileListElement.value.innerHTML = '';
+    for (const file of result.files) {
       const fileItem = document.createElement('ion-item');
-      fileItem.innerHTML = `<ion-label>${file.name}</ion-label>`; // Use file.name
-      fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
-      fileListElement.value?.appendChild(fileItem); // Use optional chaining
-  });
 
+      // Check if the file is a directory or a file
+      const statResult = await Filesystem.stat({
+        path: `${name}/${file.name}`,
+        directory
+      });
+
+      const iconUrl = statResult.type === 'directory' ? folderIcon : fileIcon;
+
+      fileItem.innerHTML = `<div class=icons><img src="${iconUrl}" class="icon">&nbsp<ion-label>${file.name}</ion-label>`;
+      fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
+      fileListElement.value?.appendChild(fileItem);
+    }
   } catch (e) {
     console.error('Unable to read dir', e);
   }
 }
+
 
 async function presentActionSheet() {
   const actionSheet = await actionSheetController.create({
@@ -88,7 +95,7 @@ async function presentActionSheet() {
   await actionSheet.present();
 }
 
-async function selectFile() {
+async function selectFile(): Promise<void> {
   try {
     const result = await FilePicker.pickFiles({
       limit: 0
@@ -96,10 +103,18 @@ async function selectFile() {
 
     if (result.files.length > 0) {
       const file = result.files[0];
+      const filePath: string | undefined = file.path;
+
+      if (!filePath) {
+        console.error('File path is undefined');
+        return;
+      }
+
       const fileData = await Filesystem.readFile({
-        path: file.name,
-        directory: Directory.External
+        path: filePath
       });
+
+      console.log('File data:', fileData);
 
       if (fileData) {
         await Filesystem.writeFile({
@@ -108,10 +123,11 @@ async function selectFile() {
           directory: Directory.Data,
           encoding: Encoding.UTF8
         });
-        await loadFiles(); // Refresh the file list
+        console.log('File written successfully');
+        await loadFiles(); 
       }
     }
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('File selection failed', e);
   }
 }
@@ -151,7 +167,7 @@ async function createFolder(folderName: string) {
       directory: Directory.Data,
       recursive: false
     });
-    await loadFiles(); // Refresh the file list
+    await loadFiles(); 
   } catch (e) {
     console.error('Unable to create folder', e);
   }
@@ -159,30 +175,26 @@ async function createFolder(folderName: string) {
 
 async function handleItemClick(name: string, directory: Directory) {
   try {
-    // Check if the item is a file or directory
     const result = await Filesystem.stat({
       path: name,
-      directory : directory ?? Directory.Data
+      directory: directory ?? Directory.Data
     });
 
-    if (result.type === "directory") {
-      // Load the contents of the directory
+    if (result.type === 'directory') {
       await loadFiles(directory, name);
     } else {
-      // Open the file
-      await openFile(name);
+      const fullPath = `${directory}/${name}`;
+      await openFile(fullPath);
     }
   } catch (e) {
     console.error('Unable to open item', e);
   }
 }
 
-
-async function openFile(fileName: string) {
+async function openFile(filePath: string) {
   try {
-    const path = `${Directory.Data}/${fileName}`;
     await FileOpener.openFile({
-      path: path,
+      path: filePath,
     });
   } catch (e) {
     console.error('Unable to open file', e);
@@ -207,8 +219,8 @@ function getContentType(fileName: string): string {
 }
 </script>
 
-
 <style scoped>
+
 
 .button-container {
   padding-left:85%;
