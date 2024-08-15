@@ -10,6 +10,7 @@
       <ion-header collapse="condense">
       </ion-header>
       <div class="button-container">
+            <ion-button fill="solid" style="margin-right: 70%;" @click="getBack">back</ion-button>
             <ion-button fill="solid" @click="presentActionSheet">+</ion-button>
       </div>
       <div class="list">
@@ -32,6 +33,7 @@ import fileIcon from './file-icon.png';
 import deletebutton from './delete-button.png'
 
 const fileListElement = ref<HTMLElement | null>(null);
+const currentPath = ref<string>('');  // Speichert den aktuellen Pfad
 
 onMounted(async () => {
   fileListElement.value = document.getElementById('file-list');
@@ -39,6 +41,7 @@ onMounted(async () => {
 });
 
 async function loadFiles(directory: Directory = Directory.Data, name: string = '') {
+  currentPath.value = name;
   if (!fileListElement.value) {
     return;
   }
@@ -54,8 +57,10 @@ async function loadFiles(directory: Directory = Directory.Data, name: string = '
       return;
     }
     fileListElement.value.innerHTML = '';
+    
     for (const file of result.files) {
       const fileItem = document.createElement('ion-item');
+      fileItem.setAttribute('data-file-name', file.name); // Attribut zuweisen
 
       const statResult = await Filesystem.stat({
         path: `${name}/${file.name}`,
@@ -72,11 +77,42 @@ async function loadFiles(directory: Directory = Directory.Data, name: string = '
         fileItem.innerHTML = `<img src="${iconUrl}" style="width: 40px; height: 40px;">&nbsp<ion-label>${file.name}</ion-label><img src="${deletebutton}" style="width: 40px; height: 40px; margin-left:8px;" class="delete-button">`;
         fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
         fileListElement.value?.appendChild(fileItem);
+
+      // Klick auf das gesamte Item (außer Delete-Button) behandelt Öffnen von Dateien/Ordnern
+      fileItem.addEventListener('click', (event) => handleItemClick(file.name, directory));
+
+      // Klick auf den Delete-Button behandelt das Löschen von Dateien/Ordnern
+      fileItem.querySelector('.delete-button')?.addEventListener('click', async (event) => {
+        event.stopPropagation(); // Verhindert das Auslösen des Events für das übergeordnete Element
+
+        try {
+          if (statResult.type === 'directory') {
+            await Filesystem.rmdir({
+              path: `${name}/${file.name}`,
+              directory: directory,
+              recursive: true // Rekursives Löschen
+            });
+          } else {
+            await Filesystem.deleteFile({
+              path: `${name}/${file.name}`,
+              directory: directory
+            });
+          }
+          
+          // Entferne das Listenelement aus dem DOM
+          fileItem.remove();
+        } catch (e) {
+          console.error('Unable to delete item', e);
+        }
+      });
+
+      fileListElement.value?.appendChild(fileItem);
     }
   } catch (e) {
     console.error('Unable to read dir', e);
   }
 }
+
 
 async function presentActionSheet() {
   const actionSheet = await actionSheetController.create({
@@ -122,13 +158,13 @@ async function selectFile(): Promise<void> {
 
       if (fileData) {
         await Filesystem.writeFile({
-          path: file.name,
+          path: `${currentPath.value}/${file.name}`, // Datei im aktuellen Verzeichnis speichern
           data: fileData.data,
           directory: Directory.Data,
           encoding: Encoding.UTF8
         });
         console.log('File written successfully');
-        await loadFiles(); 
+        await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
       }
     }
   } catch (e: unknown) {
@@ -167,11 +203,11 @@ async function presentCreateFolderAlert() {
 async function createFolder(folderName: string) {
   try {
     await Filesystem.mkdir({
-      path: folderName,
+      path: `${currentPath.value}/${folderName}`, // Ordner im aktuellen Verzeichnis erstellen
       directory: Directory.Data,
       recursive: false
     });
-    await loadFiles(); 
+    await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
   } catch (e) {
     console.error('Unable to create folder', e);
   }
@@ -179,21 +215,62 @@ async function createFolder(folderName: string) {
 
 async function handleItemClick(name: string, directory: Directory) {
   try {
-    const result = await Filesystem.stat({
-      path: name,
-      directory: directory ?? Directory.Data
-    });
+    const fileItem = document.querySelector(`[data-file-name="${name}"]`);
+    
+    if (fileItem) {
+      // Prüfen, ob der Klick auf den Delete-Button war
+      const deleteButton = fileItem.querySelector('.delete-button');
+      
+      if (deleteButton) {
+        deleteButton.addEventListener('click', async (event) => {
+          event.stopPropagation(); // Verhindert das Auslösen des Events für das übergeordnete Element
+          
+          // Lösche die Datei oder das Verzeichnis aus dem Dateisystem
+          try {
+            const statResult = await Filesystem.stat({
+              path: `${directory}/${name}`,
+              directory: directory
+            });
 
-    if (result.type === 'directory') {
-      await loadFiles(directory, name);
-    } else {
-      const fullPath = `${directory}/${name}`;
-      await openFile(fullPath);
+            if (statResult.type === 'directory') {
+              await Filesystem.rmdir({
+                path: `${directory}/${name}`,
+                directory: directory,
+                recursive: true // Rekursives Löschen
+              });
+            } else {
+              await Filesystem.deleteFile({
+                path: `${directory}/${name}`,
+                directory: directory
+              });
+            }
+
+            // Entferne das Listenelement aus dem DOM
+            fileItem.remove();
+          } catch (e) {
+            console.error('Unable to delete item', e);
+          }
+        });
+      }
+
+      // Prüfe, ob das Element ein Verzeichnis ist, und lade es bei einem Klick darauf
+      const statResult = await Filesystem.stat({
+        path: name,
+        directory: directory
+      });
+
+      if (statResult.type === 'directory') {
+        await loadFiles(directory, name);
+      } else {
+        const fullPath = `${directory}/${name}`;
+        await openFile(fullPath);
+      }
     }
   } catch (e) {
-    console.error('Unable to open item', e);
+    console.error('Unable to handle item click', e);
   }
 }
+
 
 async function openFile(filePath: string) {
   try {
@@ -205,6 +282,21 @@ async function openFile(filePath: string) {
   }
 }
 
+async function getBack() {
+  // Überprüfen, ob wir uns nicht bereits im Root-Verzeichnis befinden
+  if (currentPath.value === '') {
+    console.log('Bereits im Root-Verzeichnis');
+    return;
+  }
+
+  // Entferne das letzte Verzeichnis im Pfad
+  const pathParts = currentPath.value.split('/');
+  pathParts.pop();  // Entferne das letzte Segment
+  const newPath = pathParts.join('/');
+
+  // Lade das übergeordnete Verzeichnis
+  await loadFiles(Directory.Data, newPath);
+}
 
 
 function getContentType(fileName: string): string {
@@ -228,10 +320,11 @@ function getContentType(fileName: string): string {
 <style scoped>
 
 .button-container {
-  padding-left:85%;
   padding-top: 1%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
 }
-
 .list {
   display: flex;
   flex-direction: column;
