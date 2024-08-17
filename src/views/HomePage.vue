@@ -1,8 +1,8 @@
 <template>
   <ion-page>
     <ion-header :translucent="true">
-      <ion-toolbar>
-        <ion-title>Dateimanager 3000</ion-title>
+      <ion-toolbar class="toolbar">
+        <ion-title style="margin-left: 22%; font-style: italic; color: blue;">Dateimanager 3000</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -26,7 +26,7 @@
 import { ref, onMounted } from 'vue';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
-import { IonActionSheet, actionSheetController, alertController, IonButton } from '@ionic/vue';
+import { actionSheetController, alertController, IonButton } from '@ionic/vue';
 import { FileOpener } from '@capawesome-team/capacitor-file-opener';
 import folderIcon from './folder-icon.png';
 import fileIcon from './file-icon.png';
@@ -34,6 +34,7 @@ import deletebutton from './delete-button.png'
 
 const fileListElement = ref<HTMLElement | null>(null);
 const currentPath = ref<string>('');  // Speichert den aktuellen Pfad
+
 
 onMounted(async () => {
   fileListElement.value = document.getElementById('file-list');
@@ -68,7 +69,7 @@ async function loadFiles(directory: Directory = Directory.Data, name: string = '
       });
 
       const iconUrl = statResult.type === 'directory' ? folderIcon : fileIcon;
-      if (iconUrl == folderIcon) {
+      if (iconUrl === folderIcon) {
         fileItem.innerHTML = `<img src="${iconUrl}" style="width: 40px; height: 40px; margin-left:8px;">&nbsp<ion-label>${file.name}</ion-label><img src="${deletebutton}" style="width: 40px; height: 40px; margin-left:8px;" class="delete-button">`;
         fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
         fileListElement.value?.appendChild(fileItem);
@@ -138,7 +139,8 @@ async function presentActionSheet() {
 async function selectFile(): Promise<void> {
   try {
     const result = await FilePicker.pickFiles({
-      limit: 0
+      limit: 0,
+      readData: true
     });
 
     if (result.files.length > 0) {
@@ -161,8 +163,8 @@ async function selectFile(): Promise<void> {
           path: `${currentPath.value}/${file.name}`, // Datei im aktuellen Verzeichnis speichern
           data: fileData.data,
           directory: Directory.Data,
-          encoding: Encoding.UTF8
         });
+        
         console.log('File written successfully');
         await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
       }
@@ -207,6 +209,7 @@ async function createFolder(folderName: string) {
       directory: Directory.Data,
       recursive: false
     });
+    
     await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
   } catch (e) {
     console.error('Unable to create folder', e);
@@ -262,7 +265,7 @@ async function handleItemClick(name: string, directory: Directory) {
       if (statResult.type === 'directory') {
         await loadFiles(directory, name);
       } else {
-        const fullPath = `${directory}/${name}`;
+        const fullPath = `${name}`;
         await openFile(fullPath);
       }
     }
@@ -271,12 +274,25 @@ async function handleItemClick(name: string, directory: Directory) {
   }
 }
 
-
-async function openFile(filePath: string) {
+async function openFile(fileName: string) {
   try {
-    await FileOpener.openFile({
-      path: filePath,
+    const fullPath = `${currentPath.value}/${fileName}`;
+
+    // Erhalte den vollständigen URI der Datei
+    const fileUriResult = await Filesystem.getUri({
+      directory: Directory.Data,
+      path: fullPath,
     });
+
+    const fileUri = fileUriResult.uri;
+    console.log('Attempting to open file at URI:', fileUri);
+
+    // Datei öffnen mit FileOpener
+    await FileOpener.openFile({
+      path: fileUri,
+    });
+
+    console.log(`File opened successfully: ${fileUri}`);
   } catch (e) {
     console.error('Unable to open file', e);
   }
