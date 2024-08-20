@@ -301,6 +301,9 @@ async function handleItemClick(name: string, directory: Directory) {
 
 async function openFile(filePath: string) {
   try {
+    // Debug-Ausgabe des Pfades
+    console.log('Attempting to get URI for file path:', filePath);
+
     // Erhalte den vollständigen URI der Datei
     const fileUriResult = await Filesystem.getUri({
       directory: Directory.Data,
@@ -308,7 +311,12 @@ async function openFile(filePath: string) {
     });
 
     const fileUri = fileUriResult.uri;
-    console.log('Attempting to open file at URI:', fileUri);
+    console.log('Obtained file URI:', fileUri);
+
+    // Überprüfen Sie den URI vor dem Öffnen
+    if (!fileUri) {
+      throw new Error('File URI is not defined');
+    }
 
     // Datei öffnen mit FileOpener
     await FileOpener.openFile({
@@ -320,6 +328,7 @@ async function openFile(filePath: string) {
     console.error('Unable to open file', e);
   }
 }
+
 
 async function getBack() {
   if (currentPath.value.length === 0) {
