@@ -14,7 +14,7 @@
             <ion-button fill="solid" @click="presentActionSheet">+</ion-button>
       </div>
       <div class="list">
-        <ion-list id="file-list"></ion-list>
+        <ion-list inset="true" lines="full" id="file-list"></ion-list>
       </div>
     </ion-content>
     <ion-footer>
@@ -33,8 +33,7 @@ import fileIcon from './file-icon.png';
 import deletebutton from './delete-button.png'
 
 const fileListElement = ref<HTMLElement | null>(null);
-const currentPath = ref<string>('');  // Speichert den aktuellen Pfad
-
+const currentPath = ref<string[]>([]);  // Speichert den aktuellen Pfad als Array
 
 onMounted(async () => {
   fileListElement.value = document.getElementById('file-list');
@@ -42,78 +41,93 @@ onMounted(async () => {
 });
 
 async function loadFiles(directory: Directory = Directory.Data, name: string = '') {
-  currentPath.value = name;
-  if (!fileListElement.value) {
-    return;
-  }
-
   try {
-    const result = await Filesystem.readdir({
-      directory,
-      path: name
+    // Überprüfen, ob currentPath leer ist, und initialisieren, falls notwendig
+    if (currentPath.value.length === 0) {
+      currentPath.value = [''];  // Setzen des Root-Verzeichnisses
+    }
+
+    const fullPath = currentPath.value.join('/');
+
+    const statResult = await Filesystem.stat({
+      path: fullPath,
+      directory
     });
 
-    if (result.files.length === 0) {
-      fileListElement.value.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
-      return;
+    // Überprüfen, ob das fileListElement vorhanden ist
+    if (!fileListElement.value) {
+      console.error('fileListElement is null');
+      return;  // Beenden der Funktion, wenn fileListElement null ist
     }
-    fileListElement.value.innerHTML = '';
-    
-    for (const file of result.files) {
-      const fileItem = document.createElement('ion-item');
-      fileItem.setAttribute('data-file-name', file.name); // Attribut zuweisen
 
-      const statResult = await Filesystem.stat({
-        path: `${name}/${file.name}`,
-        directory
+    // Wenn das Verzeichnis existiert, Dateien laden
+    if (statResult.type === 'directory') {
+      const result = await Filesystem.readdir({
+        directory,
+        path: fullPath
       });
 
-      const iconUrl = statResult.type === 'directory' ? folderIcon : fileIcon;
-      if (iconUrl === folderIcon) {
-        fileItem.innerHTML = `<img src="${iconUrl}" style="width: 40px; height: 40px; margin-left:8px;">&nbsp<ion-label>${file.name}</ion-label><img src="${deletebutton}" style="width: 40px; height: 40px; margin-left:8px;" class="delete-button">`;
-        fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
-        fileListElement.value?.appendChild(fileItem);
+      // Verarbeiten der Dateiliste
+      if (result.files.length === 0) {
+        fileListElement.value.innerHTML = '<ion-item><ion-label>Keine Dateien gefunden</ion-label></ion-item>';
+        return;
       }
-      else
+
+      fileListElement.value.innerHTML = '';
+
+      for (const file of result.files) {
+        const fileItem = document.createElement('ion-item');
+        fileItem.setAttribute('data-file-name', file.name);
+
+        const statFileResult = await Filesystem.stat({
+          path: `${fullPath}/${file.name}`,
+          directory
+        });
+
+        const iconUrl = statFileResult.type === 'directory' ? folderIcon : fileIcon;
         fileItem.innerHTML = `<img src="${iconUrl}" style="width: 40px; height: 40px;">&nbsp<ion-label>${file.name}</ion-label><img src="${deletebutton}" style="width: 40px; height: 40px; margin-left:8px;" class="delete-button">`;
-        fileItem.addEventListener('click', () => handleItemClick(file.name, directory));
-        fileListElement.value?.appendChild(fileItem);
+        fileItem.addEventListener('click', (event) => handleItemClick(file.name, directory));
 
-      // Klick auf das gesamte Item (außer Delete-Button) behandelt Öffnen von Dateien/Ordnern
-      fileItem.addEventListener('click', (event) => handleItemClick(file.name, directory));
+        // Hinzufügen des Listenelements zum DOM
+        fileListElement.value.appendChild(fileItem);
 
-      // Klick auf den Delete-Button behandelt das Löschen von Dateien/Ordnern
-      fileItem.querySelector('.delete-button')?.addEventListener('click', async (event) => {
-        event.stopPropagation(); // Verhindert das Auslösen des Events für das übergeordnete Element
+        // Klick auf den Delete-Button behandelt das Löschen von Dateien/Ordnern
+        fileItem.querySelector('.delete-button')?.addEventListener('click', async (event) => {
+          event.stopPropagation(); // Verhindert das Auslösen des Events für das übergeordnete Element
 
-        try {
-          if (statResult.type === 'directory') {
-            await Filesystem.rmdir({
-              path: `${name}/${file.name}`,
-              directory: directory,
-              recursive: true // Rekursives Löschen
-            });
-          } else {
-            await Filesystem.deleteFile({
-              path: `${name}/${file.name}`,
-              directory: directory
-            });
+          try {
+            if (statFileResult.type === 'directory') {
+              await Filesystem.rmdir({
+                path: `${fullPath}/${file.name}`,
+                directory: directory,
+                recursive: true // Rekursives Löschen
+              });
+            } else {
+              await Filesystem.deleteFile({
+                path: `${fullPath}/${file.name}`,
+                directory: directory
+              });
+            }
+
+            // Entferne das Listenelement aus dem DOM
+            fileItem.remove();
+          } catch (e) {
+            console.error('Unable to delete item', e);
           }
-          
-          // Entferne das Listenelement aus dem DOM
-          fileItem.remove();
-        } catch (e) {
-          console.error('Unable to delete item', e);
-        }
-      });
-
-      fileListElement.value?.appendChild(fileItem);
+        });
+      }
+    } else {
+      console.error('Specified path is not a directory');
     }
   } catch (e) {
     console.error('Unable to read dir', e);
+
+    // Bei einem Fehler zurück zum vorherigen Verzeichnis
+    if (currentPath.value.length > 0) {
+      currentPath.value.pop();  // Entfernt das letzte Element im Pfad
+    }
   }
 }
-
 
 async function presentActionSheet() {
   const actionSheet = await actionSheetController.create({
@@ -159,14 +173,17 @@ async function selectFile(): Promise<void> {
       console.log('File data:', fileData);
 
       if (fileData) {
+        // Konvertiere currentPath.value (Array) in einen String, bevor es verwendet wird
+        const fullPath = currentPath.value.join('/') + '/' + file.name;
+
         await Filesystem.writeFile({
-          path: `${currentPath.value}/${file.name}`, // Datei im aktuellen Verzeichnis speichern
+          path: fullPath, // Datei im aktuellen Verzeichnis speichern
           data: fileData.data,
           directory: Directory.Data,
         });
         
         console.log('File written successfully');
-        await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
+        await loadFiles(Directory.Data, currentPath.value.join('/')); // Liste der Dateien im aktuellen Verzeichnis neu laden
       }
     }
   } catch (e: unknown) {
@@ -204,13 +221,18 @@ async function presentCreateFolderAlert() {
 
 async function createFolder(folderName: string) {
   try {
+    // Erstellen des vollständigen Pfads, indem das Array `currentPath.value` verwendet wird
+    const fullPath = [...currentPath.value, folderName].join('/');
+
+    // Erstellen des neuen Ordners im Dateisystem
     await Filesystem.mkdir({
-      path: `${currentPath.value}/${folderName}`, // Ordner im aktuellen Verzeichnis erstellen
+      path: fullPath, // Ordner im aktuellen Verzeichnis erstellen
       directory: Directory.Data,
       recursive: false
     });
-    
-    await loadFiles(Directory.Data, currentPath.value); // Liste der Dateien im aktuellen Verzeichnis neu laden
+
+    // Lade die Dateien im aktuellen Verzeichnis neu, ohne den Pfad zu ändern
+    await loadFiles(Directory.Data, currentPath.value.join('/')); // Übergebe den aktuellen Pfad als String
   } catch (e) {
     console.error('Unable to create folder', e);
   }
@@ -219,31 +241,32 @@ async function createFolder(folderName: string) {
 async function handleItemClick(name: string, directory: Directory) {
   try {
     const fileItem = document.querySelector(`[data-file-name="${name}"]`);
-    
+
     if (fileItem) {
       // Prüfen, ob der Klick auf den Delete-Button war
       const deleteButton = fileItem.querySelector('.delete-button');
-      
+
       if (deleteButton) {
         deleteButton.addEventListener('click', async (event) => {
           event.stopPropagation(); // Verhindert das Auslösen des Events für das übergeordnete Element
-          
+
           // Lösche die Datei oder das Verzeichnis aus dem Dateisystem
           try {
+            const fullPath = [...currentPath.value, name].join('/');
             const statResult = await Filesystem.stat({
-              path: `${directory}/${name}`,
+              path: fullPath,
               directory: directory
             });
 
             if (statResult.type === 'directory') {
               await Filesystem.rmdir({
-                path: `${directory}/${name}`,
+                path: fullPath,
                 directory: directory,
                 recursive: true // Rekursives Löschen
               });
             } else {
               await Filesystem.deleteFile({
-                path: `${directory}/${name}`,
+                path: fullPath,
                 directory: directory
               });
             }
@@ -255,33 +278,33 @@ async function handleItemClick(name: string, directory: Directory) {
           }
         });
       }
+    }
 
-      // Prüfe, ob das Element ein Verzeichnis ist, und lade es bei einem Klick darauf
-      const statResult = await Filesystem.stat({
-        path: name,
-        directory: directory
-      });
+    // Verarbeite den Klick auf die Datei oder das Verzeichnis
+    const fullPath = [...currentPath.value, name].join('/');
 
-      if (statResult.type === 'directory') {
-        await loadFiles(directory, name);
-      } else {
-        const fullPath = `${name}`;
-        await openFile(fullPath);
-      }
+    const statResult = await Filesystem.stat({
+      path: fullPath,
+      directory: directory
+    });
+
+    if (statResult.type === 'directory') {
+      currentPath.value.push(name); // Füge den Ordner zum Pfad hinzu
+      await loadFiles(directory, fullPath);
+    } else {
+      await openFile(fullPath); // Übergebe den vollständigen Pfad zur openFile Funktion
     }
   } catch (e) {
     console.error('Unable to handle item click', e);
   }
 }
 
-async function openFile(fileName: string) {
+async function openFile(filePath: string) {
   try {
-    const fullPath = `${currentPath.value}/${fileName}`;
-
     // Erhalte den vollständigen URI der Datei
     const fileUriResult = await Filesystem.getUri({
       directory: Directory.Data,
-      path: fullPath,
+      path: filePath,
     });
 
     const fileUri = fileUriResult.uri;
@@ -299,16 +322,13 @@ async function openFile(fileName: string) {
 }
 
 async function getBack() {
-  // Überprüfen, ob wir uns nicht bereits im Root-Verzeichnis befinden
-  if (currentPath.value === '') {
+  if (currentPath.value.length === 0) {
     console.log('Bereits im Root-Verzeichnis');
     return;
   }
 
-  // Entferne das letzte Verzeichnis im Pfad
-  const pathParts = currentPath.value.split('/');
-  pathParts.pop();  // Entferne das letzte Segment
-  const newPath = pathParts.join('/');
+  currentPath.value.pop(); // Entferne das letzte Verzeichnis im Pfad
+  const newPath = currentPath.value.join('/');
 
   // Lade das übergeordnete Verzeichnis
   await loadFiles(Directory.Data, newPath);
